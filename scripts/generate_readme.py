@@ -1,0 +1,102 @@
+#!/usr/bin/env python3
+import csv
+import re
+from collections import Counter
+from pathlib import Path
+
+CSV_PATH = Path("problems.csv")
+README_PATH = Path("README.md")
+START_MARK = "<!--START_SECTION:problems-->"
+END_MARK = "<!--END_SECTION:problems-->"
+
+
+def load_problems():
+    with open(CSV_PATH, newline="", encoding="utf-8") as f:
+        return list(csv.DictReader(f))
+
+
+def build_badge(label, value, color):
+    label_enc = label.replace(" ", "%20")
+    value_enc = str(value).replace(" ", "%20")
+    return f"
+
+![{label}](https://img.shields.io/badge/{label_enc}-{value_enc}-{color})
+
+"
+
+
+def generate_section(rows):
+    total = len(rows)
+    by_difficulty = Counter(r["difficulty"] for r in rows)
+    by_category = Counter(r["category"] for r in rows)
+    by_platform = Counter(r["platform"] for r in rows)
+
+    lines = []
+    lines.append(
+        " ".join(
+            [
+                build_badge("Total%20Solved", total, "brightgreen"),
+                build_badge("Easy", by_difficulty.get("Easy", 0), "success"),
+                build_badge("Medium", by_difficulty.get("Medium", 0), "yellow"),
+                build_badge("Hard", by_difficulty.get("Hard", 0), "critical"),
+            ]
+        )
+    )
+    lines.append("")
+    lines.append("**By category:**")
+    lines.append("")
+    lines.append("| Category | Count |")
+    lines.append("|---|---|")
+    for cat, count in sorted(by_category.items(), key=lambda x: -x[1]):
+        lines.append(f"| {cat} | {count} |")
+    lines.append("")
+    lines.append("**By platform:**")
+    lines.append("")
+    lines.append("| Platform | Count |")
+    lines.append("|---|---|")
+    for plat, count in sorted(by_platform.items(), key=lambda x: -x[1]):
+        lines.append(f"| {plat} | {count} |")
+    lines.append("")
+    lines.append("**Recently solved:**")
+    lines.append("")
+    lines.append("| Date | Problem | Difficulty | Category | Platform |")
+    lines.append("|---|---|---|---|---|")
+    recent = sorted(rows, key=lambda r: r["date"], reverse=True)[:10]
+    for r in recent:
+        title_link = f"[{r['title']}]({r['link']})" if r.get("link") else r["title"]
+        lines.append(
+            f"| {r['date']} | {title_link} | {r['difficulty']} | {r['category']} | {r['platform']} |"
+        )
+
+    return "\n".join(lines)
+
+
+def update_readme(section_content):
+    if not README_PATH.exists():
+        README_PATH.write_text(
+            f"# My Problem Solving Log\n\n{START_MARK}\n{END_MARK}\n"
+        )
+
+    text = README_PATH.read_text(encoding="utf-8")
+    pattern = re.compile(
+        re.escape(START_MARK) + r".*?" + re.escape(END_MARK), re.DOTALL
+    )
+    replacement = f"{START_MARK}\n{section_content}\n{END_MARK}"
+
+    if pattern.search(text):
+        new_text = pattern.sub(replacement, text)
+    else:
+        new_text = text.rstrip() + f"\n\n{replacement}\n"
+
+    README_PATH.write_text(new_text, encoding="utf-8")
+
+
+def main():
+    rows = load_problems()
+    section = generate_section(rows)
+    update_readme(section)
+    print(f"README.md updated with {len(rows)} problems.")
+
+
+if __name__ == "__main__":
+    main()
